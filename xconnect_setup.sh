@@ -211,9 +211,13 @@ collect_inputs() {
     echo -e "  ${BOLD}Subdomain Setup${NC}"
     ask "Panel subdomain name (e.g. 'admin' → admin.$CF_DOMAIN, proxy OFF): "
     read PANEL_SUB
+    # Strip full domain if user typed it by mistake e.g. admin.domain.com → admin
+    PANEL_SUB=$(echo "$PANEL_SUB" | sed "s/\.${CF_DOMAIN}$//" | awk -F'.' '{print $1}')
 
     ask "CDN subdomain name for keys (e.g. 'th1' → th1.$CF_DOMAIN, proxy ON): "
     read CDN_SUB
+    # Strip full domain if user typed it by mistake
+    CDN_SUB=$(echo "$CDN_SUB" | sed "s/\.${CF_DOMAIN}$//" | awk -F'.' '{print $1}')
 
     # Build full domains
     PANEL_DOMAIN="${PANEL_SUB}.${CF_DOMAIN}"
