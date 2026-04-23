@@ -17,7 +17,7 @@ NC='\033[0m'
 #  EDIT THIS → your GitHub raw base URL
 #  e.g. https://raw.githubusercontent.com/YOUR_USER/YOUR_REPO/main
 # ══════════════════════════════════════════════════════════════
-REPO_RAW="https://raw.githubusercontent.com/YOUR_USER/YOUR_REPO/main"
+REPO_RAW="https://raw.githubusercontent.com/x-cinema-pro/auto3/main"
 
 ok()   { echo -e "  ${GREEN}✓${NC}  $1"; }
 err()  { echo -e "  ${RED}✗${NC}  $1"; }
