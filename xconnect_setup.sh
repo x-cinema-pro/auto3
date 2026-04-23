@@ -150,6 +150,58 @@ setup_3xui() {
 }
 
 
+
+# ═══════════════════════════════════════════════════════════════
+# Auto-read 3x-ui credentials from SQLite DB
+# ═══════════════════════════════════════════════════════════════
+read_xui_credentials() {
+    print_step "3b" "Reading 3x-ui Credentials"
+
+    XUI_DB="/etc/x-ui/x-ui.db"
+
+    if [[ ! -f "$XUI_DB" ]]; then
+        err "x-ui database not found at $XUI_DB"
+        echo ""
+        ask "Enter panel port manually: "
+        read PANEL_PORT; PANEL_PORT=${PANEL_PORT:-2053}
+        ask "Enter panel username: "
+        read PANEL_USER; PANEL_USER=${PANEL_USER:-admin}
+        ask "Enter panel password: "
+        read -s PANEL_PASS; echo ""
+        print_end_step
+        return
+    fi
+
+    # Install sqlite3 if needed
+    if ! command -v sqlite3 &>/dev/null; then
+        info "Installing sqlite3..."
+        apt-get install -y sqlite3 -qq 2>/dev/null
+    fi
+
+    # Read from settings table
+    PANEL_USER=$(sqlite3 "$XUI_DB" "SELECT value FROM settings WHERE key='webUserName' LIMIT 1;" 2>/dev/null)
+    PANEL_PASS=$(sqlite3 "$XUI_DB" "SELECT value FROM settings WHERE key='webPassword' LIMIT 1;" 2>/dev/null)
+    PANEL_PORT=$(sqlite3 "$XUI_DB" "SELECT value FROM settings WHERE key='webPort' LIMIT 1;" 2>/dev/null)
+    WEB_BASE=$(sqlite3 "$XUI_DB" "SELECT value FROM settings WHERE key='webBasePath' LIMIT 1;" 2>/dev/null)
+
+    # Fallback defaults
+    PANEL_PORT=${PANEL_PORT:-2053}
+    PANEL_USER=${PANEL_USER:-admin}
+
+    if [[ -z "$PANEL_PASS" ]]; then
+        err "Could not read password from DB."
+        ask "Enter panel password manually: "
+        read -s PANEL_PASS; echo ""
+    fi
+
+    ok "Panel Port:     $PANEL_PORT"
+    ok "Panel User:     $PANEL_USER"
+    ok "Panel Password: $(echo "$PANEL_PASS" | sed 's/./*/g')"
+    [[ -n "$WEB_BASE" ]] && ok "Web Base Path:  $WEB_BASE"
+
+    print_end_step
+}
+
 # ═══════════════════════════════════════════════════════════════
 # STEP 4: Collect User Inputs
 # ═══════════════════════════════════════════════════════════════
@@ -174,20 +226,11 @@ collect_inputs() {
 
     divider
 
-    # 3x-ui panel details
-    echo ""
-    echo -e "  ${BOLD}3x-ui Panel Details${NC}"
-    ask "Panel Port [default: 2053]: "
-    read PANEL_PORT
-    PANEL_PORT=${PANEL_PORT:-2053}
-
-    ask "Panel Username [default: admin]: "
-    read PANEL_USER
-    PANEL_USER=${PANEL_USER:-admin}
-
-    ask "Panel Password: "
-    read -s PANEL_PASS
-    echo ""
+    # 3x-ui credentials will be auto-read from DB after install
+    # Set placeholders — overwritten later by read_xui_credentials
+    PANEL_PORT=2053
+    PANEL_USER=""
+    PANEL_PASS=""
 
     divider
 
@@ -394,7 +437,7 @@ xui_login() {
     rm -f "$COOKIE_FILE"
 
     LOGIN_RESP=$(curl -s -c "$COOKIE_FILE" \
-        -X POST "http://localhost:${PANEL_PORT}/login" \
+        -X POST "http://localhost:${PANEL_PORT}${WEB_BASE}/login" \
         -H "Content-Type: application/x-www-form-urlencoded" \
         -d "username=${PANEL_USER}&password=${PANEL_PASS}")
 
@@ -447,7 +490,7 @@ setup_xui_inbound() {
     info "Creating VLESS+WS inbound on port 8080..."
 
     RESP=$(curl -s -b "$COOKIE_FILE" \
-        -X POST "http://localhost:${PANEL_PORT}/xui/API/inbounds/add" \
+        -X POST "http://localhost:${PANEL_PORT}${WEB_BASE}/xui/API/inbounds/add" \
         -H "Content-Type: application/json" \
         -d "$INBOUND_PAYLOAD")
 
@@ -537,6 +580,7 @@ CDN_SUB=$CDN_SUB
 PANEL_SUB=$PANEL_SUB
 WS_PATH=$WS_PATH
 WS_PORT=8080
+WEB_BASE=$WEB_BASE
 INBOUND_ID=$(cat /tmp/xconnect_inbound_id.txt 2>/dev/null || echo "1")
 EOF
 
@@ -591,6 +635,7 @@ main() {
     echo ""
     read -p "  Press ENTER to continue to 3x-ui install..." _
     setup_3xui
+    read_xui_credentials
     setup_xui_inbound
     setup_firewall
     save_config
