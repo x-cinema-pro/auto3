@@ -323,33 +323,50 @@ setup_origin_rule() {
 
     info "Creating Origin Rule: $CDN_DOMAIN:443 → VPS:8080..."
 
-    RULE_PAYLOAD=$(cat <<EOF
-{
-  "name": "X-Connect Origin Rules",
-  "kind": "zone",
-  "phase": "http_request_origin",
-  "rules": [
-    {
-      "action": "route",
-      "action_parameters": {
-        "origin": {
-          "port": 8080
-        }
-      },
-      "expression": "http.host eq \"${CDN_DOMAIN}\"",
-      "description": "Forward ${CDN_DOMAIN}:443 to origin port 8080",
-      "enabled": true
-    }
-  ]
-}
-EOF
-)
-
-    RESP=$(curl -s -X PUT \
+    # Step 1: Check if http_request_origin phase entry point already exists
+    EXISTING=$(curl -s -X GET \
         -H "Authorization: Bearer $CF_API_TOKEN" \
         -H "Content-Type: application/json" \
-        "$CF_API/zones/$CF_ZONE_ID/rulesets/phases/http_request_origin/entrypoint" \
-        -d "$RULE_PAYLOAD")
+        "$CF_API/zones/$CF_ZONE_ID/rulesets/phases/http_request_origin/entrypoint" 2>/dev/null)
+
+    EXISTING_ID=$(echo "$EXISTING" | jq -r '.result.id // empty' 2>/dev/null)
+
+    if [[ -n "$EXISTING_ID" ]]; then
+        # Ruleset exists — PUT to update it
+        info "Existing Origin ruleset found ($EXISTING_ID) — updating..."
+        RESP=$(curl -s -X PUT \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            "$CF_API/zones/$CF_ZONE_ID/rulesets/$EXISTING_ID" \
+            -d "{
+              \"rules\": [{
+                \"action\": \"route\",
+                \"action_parameters\": { \"origin\": { \"port\": 8080 } },
+                \"expression\": \"http.host eq \\\"${CDN_DOMAIN}\\\"\",
+                \"description\": \"X-Connect: ${CDN_DOMAIN}:443 → origin:8080\",
+                \"enabled\": true
+              }]
+            }")
+    else
+        # No ruleset yet — POST to create
+        info "No existing ruleset — creating new..."
+        RESP=$(curl -s -X POST \
+            -H "Authorization: Bearer $CF_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            "$CF_API/zones/$CF_ZONE_ID/rulesets" \
+            -d "{
+              \"name\": \"X-Connect Origin Rules\",
+              \"kind\": \"zone\",
+              \"phase\": \"http_request_origin\",
+              \"rules\": [{
+                \"action\": \"route\",
+                \"action_parameters\": { \"origin\": { \"port\": 8080 } },
+                \"expression\": \"http.host eq \\\"${CDN_DOMAIN}\\\"\",
+                \"description\": \"X-Connect: ${CDN_DOMAIN}:443 → origin:8080\",
+                \"enabled\": true
+              }]
+            }")
+    fi
 
     if echo "$RESP" | jq -e '.success' 2>/dev/null | grep -q true; then
         ok "Origin Rule created: $CDN_DOMAIN:443 → origin:8080"
@@ -357,16 +374,16 @@ EOF
         ERR=$(echo "$RESP" | jq -r '.errors[0].message // "Unknown error"' 2>/dev/null)
         err "Origin Rule failed: $ERR"
         echo ""
-        echo -e "  ${YELLOW}Manual fallback:${NC}"
-        echo -e "  CF Dashboard → Your Domain → Rules → Origin Rules"
-        echo -e "  Condition: Host equals ${CDN_DOMAIN}"
-        echo -e "  Override destination port: 8080"
+        echo -e "  ${YELLOW}Your API token is missing the Origin Write permission.${NC}"
+        echo -e "  Go to CF Dashboard → API Tokens → edit xconnect-api → Add more:"
+        echo -e "  ${CYAN}Zone → Config Rules → Edit${NC}"
+        echo -e "  Save token, copy new value, re-run script."
+        echo ""
+        read -p "  Or press ENTER to do it manually and continue..." _
     fi
 
     print_end_step
 }
-
-
 # ═══════════════════════════════════════════════════════════════
 # STEP 7: 3x-ui Login
 # ═══════════════════════════════════════════════════════════════
