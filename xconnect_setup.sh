@@ -427,113 +427,11 @@ setup_origin_rule() {
 
     print_end_step
 }
-# ═══════════════════════════════════════════════════════════════
-# STEP 7: 3x-ui Login
-# ═══════════════════════════════════════════════════════════════
-xui_login() {
-    info "Logging into 3x-ui panel..."
 
-    COOKIE_FILE="/tmp/xconnect_xui_session.txt"
-    rm -f "$COOKIE_FILE"
-
-    LOGIN_RESP=$(curl -s -c "$COOKIE_FILE" \
-        -X POST "http://localhost:${PANEL_PORT}${WEB_BASE}/login" \
-        -H "Content-Type: application/x-www-form-urlencoded" \
-        -d "username=${PANEL_USER}&password=${PANEL_PASS}")
-
-    if echo "$LOGIN_RESP" | jq -e '.success' 2>/dev/null | grep -q true; then
-        ok "Logged into 3x-ui panel"
-        return 0
-    else
-        err "3x-ui login failed. Check username/password and panel port."
-        echo -e "  Response: $(echo "$LOGIN_RESP" | head -c 200)"
-        return 1
-    fi
-}
 
 
 # ═══════════════════════════════════════════════════════════════
-# STEP 8: Create WS Inbound in 3x-ui
-# ═══════════════════════════════════════════════════════════════
-setup_xui_inbound() {
-    print_step "7" "Creating 3x-ui Inbound"
-
-    COOKIE_FILE="/tmp/xconnect_xui_session.txt"
-
-    if ! xui_login; then
-        print_end_step
-        return 1
-    fi
-
-    DEFAULT_UUID=$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid)
-    ENCODED_PATH=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$WS_PATH'))" 2>/dev/null || echo "%2F")
-
-    # Build proper JSON settings strings
-    SETTINGS_JSON=$(jq -c -n \
-        --arg uuid "$DEFAULT_UUID" \
-        '{clients:[{id:$uuid,flow:"",email:"default",limitIp:0,totalGB:0,expiryTime:0,enable:true,tgId:"",subId:""}],decryption:"none",fallbacks:[]}')
-
-    STREAM_JSON=$(jq -c -n \
-        --arg path "$WS_PATH" \
-        '{network:"ws",security:"none",wsSettings:{path:$path,headers:{}}}')
-
-    SNIFF_JSON='{"enabled":true,"destOverride":["http","tls"]}'
-
-    INBOUND_PAYLOAD=$(jq -c -n \
-        --arg remark "xconnect-ws-cdn" \
-        --argjson port 8080 \
-        --arg settings "$SETTINGS_JSON" \
-        --arg stream "$STREAM_JSON" \
-        --arg sniff "$SNIFF_JSON" \
-        '{remark:$remark,enable:true,listen:"",port:$port,protocol:"vless",expiryTime:0,settings:$settings,streamSettings:$stream,sniffing:$sniff}')
-
-    info "Creating VLESS+WS inbound on port 8080..."
-
-    RESP=$(curl -s -b "$COOKIE_FILE" \
-        -X POST "http://localhost:${PANEL_PORT}${WEB_BASE}/xui/API/inbounds/add" \
-        -H "Content-Type: application/json" \
-        -d "$INBOUND_PAYLOAD")
-
-    if echo "$RESP" | jq -e '.success' 2>/dev/null | grep -q true; then
-        INBOUND_ID=$(echo "$RESP" | jq -r '.obj.id // "1"')
-        ok "WS Inbound created on port 8080 (ID: $INBOUND_ID)"
-
-        # Save inbound ID
-        echo "$INBOUND_ID" > /tmp/xconnect_inbound_id.txt
-
-        # Build transformed key
-        TAG="X-Connect-$(echo $CDN_SUB | tr '[:lower:]' '[:upper:]')"
-        TRANSFORMED_KEY="vless://${DEFAULT_UUID}@${CDN_DOMAIN}:443?type=ws&path=${ENCODED_PATH}&security=tls&sni=${CDN_DOMAIN}&host=${CDN_DOMAIN}&fp=chrome&alpn=http%2F1.1#${TAG}"
-
-        echo ""
-        divider
-        echo -e "  ${GREEN}${BOLD}Default Key (transformed, ready to distribute):${NC}"
-        echo ""
-        echo -e "  ${CYAN}$TRANSFORMED_KEY${NC}"
-        echo ""
-
-        # QR code in terminal if qrencode is available
-        if command -v qrencode &>/dev/null; then
-            echo -e "  ${BOLD}QR Code:${NC}"
-            qrencode -t ANSIUTF8 "$TRANSFORMED_KEY"
-            echo ""
-        fi
-
-        divider
-    else
-        err "Failed to create inbound via API"
-        echo -e "  ${DIM}Response: $(echo "$RESP" | head -c 300)${NC}"
-        info "You may need to create the inbound manually in the panel."
-        INBOUND_ID="1"
-        echo "$INBOUND_ID" > /tmp/xconnect_inbound_id.txt
-    fi
-
-    print_end_step
-}
-
-
-# ═══════════════════════════════════════════════════════════════
-# STEP 9: Open Firewall Port 8080
+# STEP 8: Open Firewall Port 8080
 # ═══════════════════════════════════════════════════════════════
 setup_firewall() {
     print_step "8" "Firewall Setup"
@@ -581,7 +479,6 @@ PANEL_SUB=$PANEL_SUB
 WS_PATH=$WS_PATH
 WS_PORT=8080
 WEB_BASE=$WEB_BASE
-INBOUND_ID=$(cat /tmp/xconnect_inbound_id.txt 2>/dev/null || echo "1")
 EOF
 
     chmod 600 "$CONFIG_FILE"
@@ -600,16 +497,13 @@ print_summary() {
     echo "  ╚══════════════════════════════════════════════════════╝"
     echo -e "${NC}"
 
-    echo -e "  ${BOLD}Panel URL:${NC}       http://$PANEL_DOMAIN:$PANEL_PORT"
-    echo -e "  ${BOLD}CDN Domain:${NC}      $CDN_DOMAIN"
-    echo -e "  ${BOLD}WS Port:${NC}         8080 (CF forwards 443 → 8080)"
-    echo -e "  ${BOLD}WS Path:${NC}         $WS_PATH"
-    echo -e "  ${BOLD}Config file:${NC}     /root/xconnect.conf"
-    echo -e "  ${BOLD}Inbound ID:${NC}      $(cat /tmp/xconnect_inbound_id.txt 2>/dev/null || echo '1')"
+    echo -e "  ${BOLD}Panel URL:${NC}    https://$PANEL_DOMAIN:$PANEL_PORT$WEB_BASE"
+    echo -e "  ${BOLD}CDN Domain:${NC}   $CDN_DOMAIN"
+    echo -e "  ${BOLD}WS Port:${NC}      8080 (CF forwards 443 → 8080)"
+    echo -e "  ${BOLD}Config:${NC}       /root/xconnect.conf"
     echo ""
-    echo -e "  ${YELLOW}Next Step:${NC}"
-    echo -e "  Deploy the Admin Panel web app to create & manage keys."
-    echo -e "  Keys will auto-transform to use ${BOLD}$CDN_DOMAIN:443${NC}"
+    echo -e "  ${YELLOW}Next — run the Admin Panel installer:${NC}"
+    echo -e "  ${CYAN}bash <(curl -Ls https://raw.githubusercontent.com/x-cinema-pro/auto3/main/install_panel.sh)${NC}"
     echo ""
 }
 
@@ -636,7 +530,6 @@ main() {
     read -p "  Press ENTER to continue to 3x-ui install..." _
     setup_3xui
     read_xui_credentials
-    setup_xui_inbound
     setup_firewall
     save_config
     print_summary
