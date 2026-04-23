@@ -556,10 +556,20 @@ main() {
     print_banner
     check_root
     install_dependencies
-    setup_3xui
     collect_inputs
     setup_cloudflare_dns
     setup_origin_rule
+    echo ""
+    echo -e "  ${YELLOW}${BOLD}  DNS records created. Waiting 15s for propagation...${NC}"
+    sleep 15
+    echo -e "  ${GREEN}✓${NC}  Ready — starting 3x-ui install"
+    echo ""
+    echo -e "  ${YELLOW}  NOTE: When 3x-ui asks for SSL setup:${NC}"
+    echo -e "  ${YELLOW}  → Choose option 1 (Let's Encrypt for Domain)${NC}"
+    echo -e "  ${YELLOW}  → Enter panel subdomain: ${BOLD}${PANEL_DOMAIN}${NC}"
+    echo ""
+    read -p "  Press ENTER to continue to 3x-ui install..." _
+    setup_3xui
     setup_xui_inbound
     setup_firewall
     save_config
