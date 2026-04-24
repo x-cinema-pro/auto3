@@ -133,17 +133,9 @@ setup_3xui() {
     echo ""
     read -p "  Press ENTER to begin 3x-ui installation..." _
 
-    info "Downloading 3x-ui installer..."
-    curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh -o /tmp/xui_install.sh
-    if [[ -f /tmp/xui_install.sh ]]; then
-        bash /tmp/xui_install.sh
-        rm -f /tmp/xui_install.sh
-    else
-        err "Failed to download 3x-ui installer. Please check your connection."
-        exit 1
-    fi
+    bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh)
 
-    sleep 5
+    sleep 3
 
     if systemctl is-active --quiet x-ui 2>/dev/null; then
         ok "3x-ui installed and running"
