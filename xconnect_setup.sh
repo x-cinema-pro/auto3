@@ -428,7 +428,32 @@ setup_origin_rule() {
     print_end_step
 }
 
+# ═══════════════════════════════════════════════════════════════
+# STEP 7: Cloudflare SSL/TLS Mode (Flexible)
+# ═══════════════════════════════════════════════════════════════
+setup_ssl_mode() {
+    print_step "7" "Cloudflare SSL/TLS Mode"
 
+    CF_API="https://api.cloudflare.com/client/v4"
+
+    info "Setting Cloudflare SSL mode to 'Flexible' to prevent timeouts..."
+    
+    RESP=$(curl -s -X PATCH \
+        -H "Authorization: Bearer $CF_API_TOKEN" \
+        -H "Content-Type: application/json" \
+        "$CF_API/zones/$CF_ZONE_ID/settings/ssl" \
+        -d "{\"value\":\"flexible\"}")
+
+    if echo "$RESP" | jq -e '.success' 2>/dev/null | grep -q true; then
+        ok "SSL/TLS Mode set to: Flexible"
+    else
+        ERR=$(echo "$RESP" | jq -r '.errors[0].message // "Unknown error"' 2>/dev/null)
+        err "Failed to set SSL mode: $ERR"
+        echo -e "  ${YELLOW}Please change it manually in the CF Dashboard -> SSL/TLS -> Overview${NC}"
+    fi
+
+    print_end_step
+}
 
 # ═══════════════════════════════════════════════════════════════
 # STEP 8: Open Firewall Port 8080
@@ -518,6 +543,7 @@ main() {
     collect_inputs
     setup_cloudflare_dns
     setup_origin_rule
+    setup_ssl_mode
     echo ""
     echo -e "  ${YELLOW}${BOLD}  DNS records created. Waiting 15s for propagation...${NC}"
     sleep 15
