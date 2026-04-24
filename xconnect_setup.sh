@@ -375,20 +375,18 @@ setup_origin_rule() {
     EXISTING_ID=$(echo "$EXISTING" | jq -r '.result.id // empty' 2>/dev/null)
 
     if [[ -n "$EXISTING_ID" ]]; then
-        # Ruleset exists — PUT to update it
-        info "Existing Origin ruleset found ($EXISTING_ID) — updating..."
-        RESP=$(curl -s -X PUT \
+        # Ruleset exists — POST to append a new rule instead of PUT to overwrite
+        info "Existing Origin ruleset found ($EXISTING_ID) — appending..."
+        RESP=$(curl -s -X POST \
             -H "Authorization: Bearer $CF_API_TOKEN" \
             -H "Content-Type: application/json" \
-            "$CF_API/zones/$CF_ZONE_ID/rulesets/$EXISTING_ID" \
+            "$CF_API/zones/$CF_ZONE_ID/rulesets/$EXISTING_ID/rules" \
             -d "{
-              \"rules\": [{
                 \"action\": \"route\",
                 \"action_parameters\": { \"origin\": { \"port\": 8080 } },
                 \"expression\": \"http.host eq \\\"${CDN_DOMAIN}\\\"\",
                 \"description\": \"X-Connect: ${CDN_DOMAIN}:443 → origin:8080\",
                 \"enabled\": true
-              }]
             }")
     else
         # No ruleset yet — POST to create
