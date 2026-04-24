@@ -84,64 +84,10 @@ install_dependencies() {
 }
 
 # ═══════════════════════════════════════════════════════════════
-# STEP 3: Check / Install 3x-ui (Interactive Fix applied)
-# ═══════════════════════════════════════════════════════════════
-setup_3xui() {
-    print_step "3" "3x-ui Panel Installation"
-
-    if systemctl is-active --quiet x-ui 2>/dev/null; then
-        ok "3x-ui is already installed and running"
-        print_end_step
-        return 0
-    fi
-
-    info "Downloading 3x-ui installer for interactive setup..."
-    echo ""
-    echo -e "  ${YELLOW}${BOLD}NOTE: The 3x-ui installer will now launch.${NC}"
-    echo -e "  ${YELLOW}Please type your desired port, username, and password.${NC}"
-    echo ""
-    
-    # Securely download and run locally to prevent stdin freezing
-    curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh -o /tmp/xui_install.sh
-    bash /tmp/xui_install.sh
-    rm -f /tmp/xui_install.sh
-
-    sleep 3
-
-    if systemctl is-active --quiet x-ui 2>/dev/null; then
-        ok "3x-ui installed and running"
-    else
-        err "3x-ui installation failed or service didn't start."
-    fi
-
-    print_end_step
-}
-
-# ═══════════════════════════════════════════════════════════════
-# Auto-read 3x-ui credentials
-# ═══════════════════════════════════════════════════════════════
-read_xui_credentials() {
-    print_step "3b" "Reading Panel Configuration"
-
-    XUI_DB="/etc/x-ui/x-ui.db"
-    if ! command -v sqlite3 &>/dev/null; then
-        apt-get install -y sqlite3 -qq 2>/dev/null
-    fi
-
-    PANEL_PORT=$(sqlite3 "$XUI_DB" "SELECT value FROM settings WHERE key='webPort' LIMIT 1;" 2>/dev/null)
-    WEB_BASE=$(sqlite3 "$XUI_DB" "SELECT value FROM settings WHERE key='webBasePath' LIMIT 1;" 2>/dev/null)
-    
-    PANEL_PORT=${PANEL_PORT:-2053}
-
-    ok "Detected Panel Port: $PANEL_PORT"
-    print_end_step
-}
-
-# ═══════════════════════════════════════════════════════════════
-# STEP 4: Collect Inputs
+# STEP 3: Collect Inputs
 # ═══════════════════════════════════════════════════════════════
 collect_inputs() {
-    print_step "4" "Configuration"
+    print_step "3" "Configuration"
 
     VPS_IP=$(curl -s --max-time 5 ifconfig.me 2>/dev/null || curl -s --max-time 5 api.ipify.org 2>/dev/null)
     ok "VPS IP detected: ${BOLD}$VPS_IP${NC}"
@@ -175,10 +121,10 @@ collect_inputs() {
 }
 
 # ═══════════════════════════════════════════════════════════════
-# STEP 5: Cloudflare DNS
+# STEP 4: Cloudflare DNS
 # ═══════════════════════════════════════════════════════════════
 setup_cloudflare_dns() {
-    print_step "5" "Cloudflare DNS Records"
+    print_step "4" "Cloudflare DNS Records"
     CF_API="https://api.cloudflare.com/client/v4"
 
     delete_existing_dns() {
@@ -204,7 +150,61 @@ setup_cloudflare_dns() {
 }
 
 # ═══════════════════════════════════════════════════════════════
-# STEP 6 & 7: CF Rules & SSL (Using POST/Append to protect other VPSs)
+# STEP 5: Check / Install 3x-ui (Interactive)
+# ═══════════════════════════════════════════════════════════════
+setup_3xui() {
+    print_step "5" "3x-ui Panel Installation"
+
+    if systemctl is-active --quiet x-ui 2>/dev/null; then
+        ok "3x-ui is already installed and running"
+        print_end_step
+        return 0
+    fi
+
+    info "Downloading 3x-ui installer for interactive setup..."
+    echo ""
+    echo -e "  ${YELLOW}${BOLD}NOTE: The 3x-ui installer will now launch.${NC}"
+    echo -e "  ${YELLOW}Please type your desired port, username, and password.${NC}"
+    echo ""
+    
+    # Securely download and run locally to prevent stdin freezing
+    curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh -o /tmp/xui_install.sh
+    bash /tmp/xui_install.sh
+    rm -f /tmp/xui_install.sh
+
+    sleep 3
+
+    if systemctl is-active --quiet x-ui 2>/dev/null; then
+        ok "3x-ui installed and running"
+    else
+        err "3x-ui installation failed or service didn't start."
+    fi
+
+    print_end_step
+}
+
+# ═══════════════════════════════════════════════════════════════
+# Auto-read 3x-ui credentials
+# ═══════════════════════════════════════════════════════════════
+read_xui_credentials() {
+    print_step "5b" "Reading Panel Configuration"
+
+    XUI_DB="/etc/x-ui/x-ui.db"
+    if ! command -v sqlite3 &>/dev/null; then
+        apt-get install -y sqlite3 -qq 2>/dev/null
+    fi
+
+    PANEL_PORT=$(sqlite3 "$XUI_DB" "SELECT value FROM settings WHERE key='webPort' LIMIT 1;" 2>/dev/null)
+    WEB_BASE=$(sqlite3 "$XUI_DB" "SELECT value FROM settings WHERE key='webBasePath' LIMIT 1;" 2>/dev/null)
+    
+    PANEL_PORT=${PANEL_PORT:-2053}
+
+    ok "Detected Panel Port: $PANEL_PORT"
+    print_end_step
+}
+
+# ═══════════════════════════════════════════════════════════════
+# STEP 6: CF Rules & SSL (Using POST/Append)
 # ═══════════════════════════════════════════════════════════════
 setup_cloudflare_rules() {
     print_step "6" "Cloudflare Rules & SSL"
@@ -231,24 +231,10 @@ setup_cloudflare_rules() {
 }
 
 # ═══════════════════════════════════════════════════════════════
-# STEP 8: Save Global Config
-# ═══════════════════════════════════════════════════════════════
-save_config() {
-    # Saved to /etc so the PHP web server can read it
-    CONFIG_FILE="/etc/xconnect.conf"
-    cat > "$CONFIG_FILE" <<EOF
-VPS_IP=$VPS_IP
-PANEL_DOMAIN=$PANEL_DOMAIN
-CDN_DOMAIN=$CDN_DOMAIN
-EOF
-    chmod 644 "$CONFIG_FILE"
-}
-
-# ═══════════════════════════════════════════════════════════════
-# STEP 9: Setup PHP Web Transformer
+# STEP 7: Setup PHP Web Transformer
 # ═══════════════════════════════════════════════════════════════
 setup_web_transformer() {
-    print_step "9" "Hosting PHP Web Transformer"
+    print_step "7" "Hosting PHP Web Transformer"
     
     # Configure Apache to listen on port 8081 (prevents conflicts with 3x-ui SSL cert generation)
     sed -i 's/Listen 80/Listen 8081/g' /etc/apache2/ports.conf
@@ -354,10 +340,10 @@ EOF
 }
 
 # ═══════════════════════════════════════════════════════════════
-# STEP 10: Final Firewall (Dynamic Port Reading)
+# STEP 8: Firewall Setup (Unified)
 # ═══════════════════════════════════════════════════════════════
-setup_firewalls() {
-    print_step "10" "Firewall Setup"
+setup_firewall() {
+    print_step "8" "Firewall Setup"
 
     open_port() {
         local port=$1
@@ -366,21 +352,52 @@ setup_firewalls() {
         iptables -I INPUT -p tcp --dport "$port" -j ACCEPT 2>/dev/null
     }
 
-    # Open standard base ports + Web Transformer port
+    # Open standard web ports + Transformer port
     open_port 80
     open_port 443
     open_port 8080
     open_port 8081
     
-    # Open the dynamically detected 3x-ui port!
+    # Open the dynamically detected 3x-ui port
     if [[ -n "$PANEL_PORT" ]]; then
         open_port "$PANEL_PORT"
-        ok "Opened Web Ports + Custom Panel Port ($PANEL_PORT)"
+        ok "Opened Web Ports (80, 443, 8080, 8081) + Panel Port ($PANEL_PORT)"
     else
         err "Could not detect panel port to open in firewall!"
     fi
 
     if command -v firewall-cmd &>/dev/null; then firewall-cmd --reload >/dev/null 2>&1; fi
+    print_end_step
+}
+
+# ═══════════════════════════════════════════════════════════════
+# STEP 9: Save Config File
+# ═══════════════════════════════════════════════════════════════
+save_config() {
+    print_step "9" "Saving Configuration"
+    
+    # Saved to /etc so the PHP web server can read it
+    CONFIG_FILE="/etc/xconnect.conf"
+    
+    cat > "$CONFIG_FILE" <<EOF
+# ─── X-Connect Setup Config ───────────────────────────────────
+# Generated: $(date)
+VPS_IP=$VPS_IP
+PANEL_PORT=$PANEL_PORT
+PANEL_DOMAIN=$PANEL_DOMAIN
+CDN_DOMAIN=$CDN_DOMAIN
+CF_ZONE_ID=$CF_ZONE_ID
+CF_DOMAIN=$CF_DOMAIN
+CDN_SUB=$CDN_SUB
+PANEL_SUB=$PANEL_SUB
+EOF
+
+    chmod 644 "$CONFIG_FILE"
+    
+    # Also save to root for the user to view easily
+    cp "$CONFIG_FILE" "/root/xconnect.conf"
+    
+    ok "Config saved to /etc/xconnect.conf & /root/xconnect.conf"
     print_end_step
 }
 
@@ -395,10 +412,12 @@ print_summary() {
     echo "  ╚══════════════════════════════════════════════════════╝"
     echo -e "${NC}"
 
-    echo -e "  ${BOLD}3x-ui Panel:${NC}      http://$PANEL_DOMAIN:$PANEL_PORT"
+    echo -e "  ${BOLD}3x-ui Panel:${NC}      http://$PANEL_DOMAIN:$PANEL_PORT$WEB_BASE"
     echo -e "  ${DIM}(Use https:// if you successfully generated Let's Encrypt)${NC}"
     echo -e "  ${BOLD}PHP Transformer:${NC}  http://$PANEL_DOMAIN:8081"
     echo -e "  ${BOLD}CDN Domain:${NC}       $CDN_DOMAIN"
+    echo -e "  ${BOLD}WS Port:${NC}          8080 (CF forwards 443 → 8080)"
+    echo -e "  ${BOLD}Config:${NC}           /root/xconnect.conf"
     echo ""
     echo -e "  ${YELLOW}Next — Install the auto Admin Panel if needed:${NC}"
     echo -e "  ${CYAN}bash <(curl -Ls https://raw.githubusercontent.com/x-cinema-pro/auto3/main/install_panel.sh)${NC}"
@@ -413,22 +432,31 @@ main() {
     check_root
     install_dependencies
     collect_inputs
+    
+    # Setup Cloudflare DNS and Rules before 3x-ui
     setup_cloudflare_dns
     setup_cloudflare_rules
+    
     echo ""
-    echo -e "  ${YELLOW}${BOLD}  DNS records created. Waiting 10s for propagation...${NC}"
-    sleep 10
+    echo -e "  ${YELLOW}${BOLD}  DNS and Rules created. Waiting 15s for propagation...${NC}"
+    sleep 15
+    echo -e "  ${GREEN}✓${NC}  Ready — starting 3x-ui install"
+    echo ""
+    echo -e "  ${YELLOW}  NOTE: When 3x-ui asks for SSL setup:${NC}"
+    echo -e "  ${YELLOW}  → Choose option 1 (Let's Encrypt for Domain)${NC}"
+    echo -e "  ${YELLOW}  → Enter panel subdomain: ${BOLD}${PANEL_DOMAIN}${NC}"
+    echo ""
+    read -p "  Press ENTER to continue to 3x-ui install..." _
     
-    # Open base ports (80) so Let's Encrypt can work during install
-    setup_firewalls 
-    
+    # 3x-ui setup
     setup_3xui
     read_xui_credentials
-    save_config
-    setup_web_transformer
     
-    # Run firewall AGAIN now that we know exactly what custom port you chose
-    setup_firewalls 
+    # Post-install setups (Web Transformer, Firewall, Config)
+    setup_web_transformer
+    setup_firewall
+    save_config
+    
     print_summary
 }
 
