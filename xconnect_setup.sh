@@ -150,7 +150,6 @@ setup_3xui() {
 }
 
 
-
 # ═══════════════════════════════════════════════════════════════
 # Auto-read 3x-ui credentials from SQLite DB
 # ═══════════════════════════════════════════════════════════════
@@ -454,27 +453,33 @@ setup_ssl_mode() {
 }
 
 # ═══════════════════════════════════════════════════════════════
-# STEP 8: Open Firewall Port 8080
+# STEP 8: Open Firewall Ports
 # ═══════════════════════════════════════════════════════════════
 setup_firewall() {
     print_step "8" "Firewall Setup"
 
     if command -v ufw &>/dev/null; then
-        info "Opening port 8080 (ufw)..."
+        info "Opening ports (ufw)..."
+        ufw allow 80/tcp > /dev/null 2>&1
+        ufw allow 443/tcp > /dev/null 2>&1
         ufw allow 8080/tcp > /dev/null 2>&1
         ufw allow "${PANEL_PORT}/tcp" > /dev/null 2>&1
-        ok "ufw: ports 8080 and $PANEL_PORT opened"
+        ok "ufw: ports 80, 443, 8080 and $PANEL_PORT opened"
     elif command -v firewall-cmd &>/dev/null; then
-        info "Opening port 8080 (firewalld)..."
+        info "Opening ports (firewalld)..."
+        firewall-cmd --permanent --add-port=80/tcp > /dev/null 2>&1
+        firewall-cmd --permanent --add-port=443/tcp > /dev/null 2>&1
         firewall-cmd --permanent --add-port=8080/tcp > /dev/null 2>&1
         firewall-cmd --permanent --add-port="${PANEL_PORT}/tcp" > /dev/null 2>&1
         firewall-cmd --reload > /dev/null 2>&1
-        ok "firewalld: ports 8080 and $PANEL_PORT opened"
+        ok "firewalld: ports 80, 443, 8080 and $PANEL_PORT opened"
     else
         info "No ufw/firewalld detected — using iptables..."
+        iptables -I INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null
+        iptables -I INPUT -p tcp --dport 443 -j ACCEPT 2>/dev/null
         iptables -I INPUT -p tcp --dport 8080 -j ACCEPT 2>/dev/null
         iptables -I INPUT -p tcp --dport "$PANEL_PORT" -j ACCEPT 2>/dev/null
-        ok "iptables: ports 8080 and $PANEL_PORT opened"
+        ok "iptables: ports 80, 443, 8080 and $PANEL_PORT opened"
     fi
 
     print_end_step
@@ -545,16 +550,16 @@ main() {
     echo ""
     echo -e "  ${YELLOW}${BOLD}  DNS records created. Waiting 15s for propagation...${NC}"
     sleep 15
-    echo -e "  ${GREEN}✓${NC}  Ready — starting 3x-ui install"
+    echo -e "  ${GREEN}✓${NC}  Ready — opening firewall before 3x-ui install"
     echo ""
     echo -e "  ${YELLOW}  NOTE: When 3x-ui asks for SSL setup:${NC}"
     echo -e "  ${YELLOW}  → Choose option 1 (Let's Encrypt for Domain)${NC}"
     echo -e "  ${YELLOW}  → Enter panel subdomain: ${BOLD}${PANEL_DOMAIN}${NC}"
     echo ""
     read -p "  Press ENTER to continue to 3x-ui install..." _
+    setup_firewall
     setup_3xui
     read_xui_credentials
-    setup_firewall
     save_config
     print_summary
 }
