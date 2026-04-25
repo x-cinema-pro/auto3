@@ -419,8 +419,6 @@ print_summary() {
     echo -e "  ${BOLD}WS Port:${NC}          8080 (CF forwards 443 → 8080)"
     echo -e "  ${BOLD}Config:${NC}           /root/xconnect.conf"
     echo ""
-    echo -e "  ${YELLOW}Next — Install the auto Admin Panel if needed:${NC}"
-    echo -e "  ${CYAN}bash <(curl -Ls https://raw.githubusercontent.com/x-cinema-pro/auto3/main/install_panel.sh)${NC}"
     echo ""
 }
 
